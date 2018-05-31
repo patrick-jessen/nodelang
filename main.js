@@ -5,154 +5,252 @@ let compile = require("./compiler/compiler").compile
 let backend = require("./compiler/backends/javascript").backend
 let jsVM = require("./vm/javascript").vm
 
-function parseModule(p) {
-  let module = p.any(new Named("statement", parseStatement))
-  p.done()
 
-  return {
-    $type: "Module",
-    $value: module,
+let objMap = {}
+function register(name, obj) {
+  obj.$type = name
+  objMap[name] = obj
+  return obj
+}
+
+function g(name) {
+  return objMap[name]
+}
+
+class Generator {
+  constructor() {
+    this.variables = {}
+  }
+
+  generate(ast) {
+    return objMap[ast.$type].generate(this, ast.$value)
+  }
+
+  defVar(name) {
+    if(this.variables[name] != null)
+      throw `variable '${name}' already defined`
+
+    this.variables[name] = true
+  }
+
+  getVar(name) {
+    if(this.variables[name] == null)
+      throw `variable '${name}' not defined`
   }
 }
 
-function parseStatement(p) {
-  p.one(/ *|\t*/)
-  let statement = p.one(
-    parseVariableDecl,
-    parseFunctionCall,
-    parseFunctionDecl,
-    parseNewLine,
-  )
-
-  if(statement == null) return
-  return {
-    $type: "Statement",
-    $value: statement,
-  }
+function gen(prog, ast) {
+  return g(ast.$type).generate(prog, ast.$value)
 }
 
+////////////////////////////////////////////////////////////////////////////////
 
-function parseVariableDecl(p) {
-  p.one(`var `)
-  let ident = p.one(parseIdentifier)
-  let val = p.opt(p => {
-    p.one(` = `)
-    return p.one(parseStringLiteral)
-  })
+register("root", {
+  parse(p) {
+    let stmts = p.any(statementObj)
+    p.done()
+    return stmts
+  },
 
-  return {
-    $type: "VariableDecl",
-    $value: {
+  generate(g, ast) {
+    ast.map(a => g.generate(a))
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let statementObj = register("statement", {
+  parse(p) {
+    p.one(/ *|\t*/)
+    let statement = p.one(
+      variableDeclObj,
+      functionCallObj,
+      functionDeclObj,
+      newLineObj,
+    )
+    return statement
+  },
+
+  generate(g, ast) {
+    g.generate(ast)
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let variableDeclObj = register("variableDecl", {
+  parse(p) {
+    p.one(`var `)
+    let ident = p.one(identifierObj)
+    let val = p.opt(p => {
+      p.one(` = `)
+      return p.one(stringLiteralObj)
+    })
+
+    return {
       var: ident,
       val: val,
     }
+  },
+
+  generate(g, ast) {
+    g.defVar(g.generate(ast.var))
   }
-}
+})
 
-function parseFunctionCall(p) {
-  let func = p.one(parseIdentifier)
-  p.one(`(`)
-  let args = p.opt(parseCallArgumentList)
-  p.one(`)`)
+////////////////////////////////////////////////////////////////////////////////
 
-  return {
-    $type: "FunctionCall",
-    $value: {
-      func: func,
-      args: args,
-    }
-  }
-}
+let functionDeclObj = register("functionDecl", {
+  parse(p) {
+    p.one("func ")
+    let func = p.one(identifierObj)
+    p.one("(")
+    let args = p.opt(argumentListObj)
+    p.one(")")
+    let ret = p.opt(p => {
+      p.one(" -> ")
+      return p.one(identifierObj)
+    })
+    p.one(/^ {/)
+    p.one(newLineObj)
+    let block = p.one(blockObj)
+    p.one("}")
 
-function parseFunctionDecl(p) {
-  p.one("func ")
-  let func = p.one(parseIdentifier)
-  p.one("(")
-  let args = p.opt(parseArgumentList)
-  p.one(")")
-  let ret = p.opt(p => {
-    p.one(" -> ")
-    return p.one(parseIdentifier)
-  })
-  p.one(/^ {/)
-  p.one(parseNewLine)
-  let block = p.one(parseBlock)
-  p.one("}")
-
-  return {
-    $type: "FunctionDecl",
-    $value: {
+    return {
       func: func,
       args: args,
       ret: ret,
       block: block,
     }
+  },
+
+  generate() {
+
   }
-}
+})
 
-function parseArgumentList(p) {
-  let first = p.one(parseIdentifier)
-  let rest = p.any(p => {
-    p.one(/, ?/)
-    return p.one(new Named("argument", parseIdentifier))
-  })
+////////////////////////////////////////////////////////////////////////////////
 
-  return [first, ...rest]
-}
+let functionCallObj = register("functionCall", {
+  parse(p) {
+    let func = p.one(identifierObj)
+    p.one(`(`)
+    let args = p.opt(callArgumentListObj)
+    p.one(`)`)
 
-function parseNewLine(p) {
-  p.one(new Named("newline", /^\r?\n/))
-}
+    return {
+      func: func,
+      args: args,
+    }
+  },
 
-function parseIdentifier(p) {
-  return {
-    $type: "Identifier",
-    $value: p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
+  generate() {
+    
   }
-}
+})
 
-function parseStringLiteral(p) {
+////////////////////////////////////////////////////////////////////////////////
+
+let argumentListObj = register("argumentList", {
+  parse(p) {
+    let first = p.one(identifierObj)
+    let rest = p.any(p => {
+      p.one(/, ?/)
+      return p.one(new Named("argument", identifierObj))
+    })
+
+    return [first, ...rest]
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let newLineObj = register("newLine", {
+  parse(p) {
+    p.one(new Named("newline", /^\r?\n/))
+  },
+
+  generate() {
+    
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let identifierObj = register("identifier", {
+  parse(p) {
+    return p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
+  },
+
+  generate(prog, ast) {
+    return ast
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let stringLiteralObj = register("stringLiteral", {
+  parse(p) {
     p.one(new Named("string", `"`))
     let value = p.one(/^[^(")]*/)
     p.one(`"`)
 
-    return {
-      $type: "StringLiteral",
-      $value: value,
-    }
-}
+    return value
+  }
+})
 
-function parseCallArgumentList(p) {
-  let first = p.one(parseCallArgument)
-  let rest = p.any(p => {
-    p.one(/, ?/)
-    return p.one(new Named("argument", parseCallArgument))
-  })
+////////////////////////////////////////////////////////////////////////////////
 
-  return [first, ...rest]
-}
+let callArgumentListObj = register("callArgumentList", {
+  parse(p) {
+    let first = p.one(callArgumentObj)
+    let rest = p.any(p => {
+      p.one(/, ?/)
+      return p.one(new Named("argument", callArgumentObj))
+    })
 
+    return [first, ...rest]
+  }
+})
 
-function parseBlock(p) {
-  return p.any(parseStatement)
-}
+////////////////////////////////////////////////////////////////////////////////
 
-function parseCallArgument(p) {
-  return p.one(parseStringLiteral, parseIdentifier)
-}
+let blockObj = register("block", {
+  parse(p) {
+    return p.any(statementObj)
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let callArgumentObj = register("callArgument", {
+  parse(p) {
+    return p.one(stringLiteralObj, identifierObj)
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
 
 let parser = new Parser("src.j")
 try {
   console.log("PARSING.................")
-  let ast = parser.one(parseModule)
-  // console.log(JSON.stringify(ast, null, 2))
+  let ast = parser.one(objMap["root"])
+  console.log(JSON.stringify(ast, null, 2))
 
-  console.log("COMPILING...............")
-  let compiled = compile(ast, backend)
+  console.log("GENERATE................")
+  let gen = new Generator
+  gen.generate(ast)
+  console.log(gen)
 
-  console.log("EXECUTING...............")
+  // console.log("COMPILING...............")
+  // let compiled = compile(ast, backend)
+
+  // console.log("EXECUTING...............")
   // console.log(compiled)
-  jsVM(compiled)
+  // jsVM(compiled)
 } catch(e) {
   console.log(e)
 }

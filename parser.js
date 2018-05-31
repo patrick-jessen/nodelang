@@ -174,14 +174,20 @@ function handle(p, obj) {
   if(typeof obj == "string") {
     return handleString(p, obj)
   }
-  else if(typeof obj == "function") {
-    return obj(p)
-  }
   else if(obj instanceof RegExp) {
     return handleRegExp(p, obj)
   }
-  else 
-    throw `unexpected parse handler type`
+  else if(typeof obj == "function") {
+    return obj(p)
+  }
+  else {
+    let res = obj.parse(p)
+    if(res == null) return
+    return {
+      $type: obj.$type,
+      $value: res
+    }
+  }
 }
 
 function handleNamed(p, obj) {

@@ -1,3 +1,6 @@
+var value = "hello"
+var value = "hello"
+
 
 func main() -> int {
     var value = "Hello"
