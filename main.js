@@ -17,30 +17,85 @@ function g(name) {
   return objMap[name]
 }
 
+class Scope {
+  constructor(name) {
+    this.name = name
+    this.variables = {}
+    this.functions = {
+      "print": 0
+    }
+  }
+
+  defVar(ast, name) {
+    if(this.variables[name] != null)
+      throw parser.error(`variable '${name}' already defined`, ast.$pos)
+
+    this.variables[name] = ast.$pos
+  }
+
+  getVar(ast, name) {
+    if(this.variables[name] == null)
+      throw parser.error(`variable '${name}' not defined`, ast.$pos)
+  }
+
+  defFunc(ast, name) {
+    if(this.functions[name] != null)
+      throw parser.error(`function '${name}' already defined`, ast.$pos)
+
+    this.functions[name] = ast.$pos
+  }
+
+  getFunc(ast, name) {
+    if(this.functions[name] == null)
+      throw parser.error(`function '${name}' not defined`, ast.$pos)
+  }
+}
+
 class Generator {
   constructor() {
-    this.variables = {}
+    this.scopesDone = []
+    this.scopes = []
   }
 
   generate(ast) {
     return objMap[ast.$type].generate(this, ast.$value)
   }
 
-  defVar(name) {
-    if(this.variables[name] != null)
-      throw `variable '${name}' already defined`
-
-    this.variables[name] = true
+  defVar(ast, name) {
+    this.scopes[this.scopes.length -1].defVar(ast, name)
+  }
+  getVar(ast, name) {
+    for(let i = this.scopes.length - 1; i >= 0; i--) {
+      try {
+        this.scopes[i].getVar(ast, name)
+        break
+      } catch(e) {
+        if(i == 0) throw e
+      }
+    }
   }
 
-  getVar(name) {
-    if(this.variables[name] == null)
-      throw `variable '${name}' not defined`
+  defFunc(ast, name) {
+    this.scopes[this.scopes.length -1].defFunc(ast, name)
   }
-}
+  getFunc(ast, name) {
+    for(let i = this.scopes.length - 1; i >= 0; i--) {
+      try {
+        this.scopes[i].getFunc(ast, name)
+      } catch(e) {
+        if(i == 0) throw e
+      }
+    }
+  }
 
-function gen(prog, ast) {
-  return g(ast.$type).generate(prog, ast.$value)
+
+
+  pushScope(name) {
+    this.scopes.push(new Scope(name))
+  }
+  popScope() {
+    this.scopesDone.push(this.scopes.pop())
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -53,7 +108,9 @@ register("root", {
   },
 
   generate(g, ast) {
+    g.pushScope("global")
     ast.map(a => g.generate(a))
+    g.popScope()
   }
 })
 
@@ -94,7 +151,7 @@ let variableDeclObj = register("variableDecl", {
   },
 
   generate(g, ast) {
-    g.defVar(g.generate(ast.var))
+    g.defVar(ast.var, g.generate(ast.var))
   }
 })
 
@@ -124,8 +181,10 @@ let functionDeclObj = register("functionDecl", {
     }
   },
 
-  generate() {
-
+  generate(g, ast) {
+    g.pushScope(g.generate(ast.func))
+    g.generate(ast.block)
+    g.popScope()
   }
 })
 
@@ -144,8 +203,9 @@ let functionCallObj = register("functionCall", {
     }
   },
 
-  generate() {
-    
+  generate(g, ast) {
+    g.getFunc(ast.func, g.generate(ast.func))
+    g.generate(ast.args)
   }
 })
 
@@ -160,7 +220,9 @@ let argumentListObj = register("argumentList", {
     })
 
     return [first, ...rest]
-  }
+  },
+
+
 })
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -196,6 +258,10 @@ let stringLiteralObj = register("stringLiteral", {
     p.one(`"`)
 
     return value
+  },
+
+  generate() {
+    
   }
 })
 
@@ -210,6 +276,10 @@ let callArgumentListObj = register("callArgumentList", {
     })
 
     return [first, ...rest]
+  },
+
+  generate(g, ast) {
+    ast.map(arg => g.generate(arg))
   }
 })
 
@@ -218,6 +288,10 @@ let callArgumentListObj = register("callArgumentList", {
 let blockObj = register("block", {
   parse(p) {
     return p.any(statementObj)
+  },
+
+  generate(g, ast) {
+    ast.map(s => g.generate(s))
   }
 })
 
@@ -226,6 +300,13 @@ let blockObj = register("block", {
 let callArgumentObj = register("callArgument", {
   parse(p) {
     return p.one(stringLiteralObj, identifierObj)
+  },
+
+  generate(g, ast) {
+    switch(ast.$type) {
+      case "identifier":
+        g.getVar(ast, g.generate(ast))
+    }
   }
 })
 
@@ -243,7 +324,7 @@ try {
   console.log("GENERATE................")
   let gen = new Generator
   gen.generate(ast)
-  console.log(gen)
+  console.log(JSON.stringify(gen, null, 2))
 
   // console.log("COMPILING...............")
   // let compiled = compile(ast, backend)
@@ -252,6 +333,6 @@ try {
   // console.log(compiled)
   // jsVM(compiled)
 } catch(e) {
-  console.log(e)
+  console.log(e.toString())
 }
 

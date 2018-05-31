@@ -66,8 +66,10 @@ class Parser {
     console.log(`${pre}${pos.line}\n${arrow}`)
   }
 
-  error(message) {
-    let e = new ParseError(this, this.iter, message)
+  error(message, pos) {
+    if(pos == null) pos = this.iter
+
+    let e = new ParseError(this, pos, message)
     if(this.err == null || this.err.position <= e.position) {
       this.err = e
     }
@@ -171,23 +173,30 @@ function handleRegExp(p, reg) {
 }
 
 function handle(p, obj) {
+  let pos = p.iter
+  let res
+
   if(typeof obj == "string") {
-    return handleString(p, obj)
+    res = handleString(p, obj)
   }
   else if(obj instanceof RegExp) {
-    return handleRegExp(p, obj)
+    res = handleRegExp(p, obj)
   }
   else if(typeof obj == "function") {
-    return obj(p)
+    res = obj(p)
+    if(res == null) return
   }
   else {
-    let res = obj.parse(p)
-    if(res == null) return
-    return {
+    let r = obj.parse(p)
+    if(r == null) return
+    res = {
       $type: obj.$type,
-      $value: res
+      $value: r
     }
   }
+
+  res.$pos = pos
+  return res
 }
 
 function handleNamed(p, obj) {
