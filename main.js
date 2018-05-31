@@ -1,6 +1,10 @@
 let Parser = require("./parser").Parser
 let Named = require("./parser").Named
 
+let compile = require("./compiler/compiler").compile
+let backend = require("./compiler/backends/javascript").backend
+let jsVM = require("./vm/javascript").vm
+
 function parseModule(p) {
   let module = p.any(new Named("statement", parseStatement))
   p.done()
@@ -64,6 +68,7 @@ function parseFunctionDecl(p) {
   p.one("func ")
   let func = p.one(parseIdentifier)
   p.one("(")
+  let args = p.opt(parseArgumentList)
   p.one(")")
   let ret = p.opt(p => {
     p.one(" -> ")
@@ -78,10 +83,21 @@ function parseFunctionDecl(p) {
     $type: "FunctionDecl",
     $value: {
       func: func,
+      args: args,
       ret: ret,
       block: block,
     }
   }
+}
+
+function parseArgumentList(p) {
+  let first = p.one(parseIdentifier)
+  let rest = p.any(p => {
+    p.one(/, ?/)
+    return p.one(new Named("argument", parseIdentifier))
+  })
+
+  return [first, ...rest]
 }
 
 function parseNewLine(p) {
@@ -89,7 +105,10 @@ function parseNewLine(p) {
 }
 
 function parseIdentifier(p) {
-  return p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]+/))
+  return {
+    $type: "Identifier",
+    $value: p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
+  }
 }
 
 function parseStringLiteral(p) {
@@ -124,10 +143,17 @@ function parseCallArgument(p) {
 
 let parser = new Parser("src.j")
 try {
+  console.log("PARSING.................")
   let ast = parser.one(parseModule)
-  console.log(JSON.stringify(ast, null, 2))
+  // console.log(JSON.stringify(ast, null, 2))
+
+  console.log("COMPILING...............")
+  let compiled = compile(ast, backend)
+
+  console.log("EXECUTING...............")
+  // console.log(compiled)
+  jsVM(compiled)
 } catch(e) {
   console.log(e)
 }
-
 
