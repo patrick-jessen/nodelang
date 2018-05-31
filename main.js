@@ -55,6 +55,9 @@ class Generator {
   constructor() {
     this.scopesDone = []
     this.scopes = []
+    this.types = {
+      "int":0
+    }
   }
 
   generate(ast) {
@@ -73,6 +76,10 @@ class Generator {
         if(i == 0) throw e
       }
     }
+  }
+  getType(ast, name) {
+    if(this.types[name] == null)
+      throw parser.error(`expected a type`, ast.$pos)
   }
 
   defFunc(ast, name) {
@@ -182,6 +189,11 @@ let functionDeclObj = register("functionDecl", {
   },
 
   generate(g, ast) {
+    if(ast.ret) {
+      g.getType(ast.ret, g.generate(ast.ret))
+    }
+    g.defFunc(ast.func, g.generate(ast.func))
+
     g.pushScope(g.generate(ast.func))
     g.generate(ast.block)
     g.popScope()

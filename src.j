@@ -1,4 +1,4 @@
-func main() -> int {
+func main() {
     var value = "Hello"
     print(value, "world")
 }
