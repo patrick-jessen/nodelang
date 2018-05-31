@@ -1,10 +1,7 @@
 let Parser = require("./parser").Parser
 let Named = require("./parser").Named
-
-let compile = require("./compiler/compiler").compile
-let backend = require("./compiler/backends/javascript").backend
-let jsVM = require("./vm/javascript").vm
-
+let Source = require("./source").Source
+let Error = require("./source").Error
 
 let objMap = {}
 function register(name, obj) {
@@ -17,16 +14,18 @@ function g(name) {
   return objMap[name]
 }
 
+
 class Scope {
-  constructor(name) {
+  constructor(srcObj, name) {
+    this.srcObj = srcObj
     this.name = name
+
     this.variables = {}
-    this.functions = {
-      "print": 0
-    }
+    this.functions = {}
+    this.types = {}
   }
 
-  defVar(ast, name) {
+  regVar(ast, name) {
     if(this.variables[name] != null)
       throw parser.error(`variable '${name}' already defined`, ast.$pos)
 
@@ -38,7 +37,7 @@ class Scope {
       throw parser.error(`variable '${name}' not defined`, ast.$pos)
   }
 
-  defFunc(ast, name) {
+  regFunc(ast, name) {
     if(this.functions[name] != null)
       throw parser.error(`function '${name}' already defined`, ast.$pos)
 
@@ -52,56 +51,55 @@ class Scope {
 }
 
 class Generator {
-  constructor() {
-    this.scopesDone = []
+  constructor(srcObj) {
+    this.srcObj = srcObj
     this.scopes = []
-    this.types = {
-      "int":0
-    }
+    this.currScope
   }
 
   generate(ast) {
     return objMap[ast.$type].generate(this, ast.$value)
   }
 
-  defVar(ast, name) {
-    this.scopes[this.scopes.length -1].defVar(ast, name)
+  regVar(ast, name) {
+    this.currScope.regVar(ast, name)
   }
   getVar(ast, name) {
-    for(let i = this.scopes.length - 1; i >= 0; i--) {
-      try {
-        this.scopes[i].getVar(ast, name)
-        break
-      } catch(e) {
-        if(i == 0) throw e
-      }
-    }
+    this.traverseScopes(s => s.getVar(ast, name))
+  }
+
+  regType(ast, name) {
+    this.currScope.regType(ast, name)
   }
   getType(ast, name) {
-    if(this.types[name] == null)
-      throw parser.error(`expected a type`, ast.$pos)
+    this.traverseScopes(s => s.getType(ast, name))
   }
 
-  defFunc(ast, name) {
-    this.scopes[this.scopes.length -1].defFunc(ast, name)
+  regFunc(ast, name) {
+    this.currScope.regFunc(ast, name)
   }
   getFunc(ast, name) {
+    this.traverseScopes(s => s.getFunc(ast, name))
+  }
+
+  pushScope(name) {
+    let s = new Scope(this.srcObj, name)
+    this.scopes.push(s)
+    this.currScope = s
+  }
+  popScope() {
+    this.scopes.pop()
+    this.currScope = this.scopes[this.scopes.length - 1]
+  }
+
+  traverseScopes(fn) {
     for(let i = this.scopes.length - 1; i >= 0; i--) {
       try {
-        this.scopes[i].getFunc(ast, name)
+        fn(this.scopes[i])
       } catch(e) {
         if(i == 0) throw e
       }
     }
-  }
-
-
-
-  pushScope(name) {
-    this.scopes.push(new Scope(name))
-  }
-  popScope() {
-    this.scopesDone.push(this.scopes.pop())
   }
 }
 
@@ -127,6 +125,7 @@ let statementObj = register("statement", {
   parse(p) {
     p.one(/ *|\t*/)
     let statement = p.one(
+      importObj,
       variableDeclObj,
       functionCallObj,
       functionDeclObj,
@@ -140,6 +139,17 @@ let statementObj = register("statement", {
   }
 })
 
+////////////////////////////////////////////////////////////////////////////////
+
+let importObj = register("import", {
+  parse(p) {
+    p.one("import ")
+    p.one(`"`)
+    let src = p.one(/^[^\r\n"]*/)
+    p.one(`"`)
+    p.loadFile(src + ".j")
+  },
+})
 ////////////////////////////////////////////////////////////////////////////////
 
 let variableDeclObj = register("variableDecl", {
@@ -158,7 +168,7 @@ let variableDeclObj = register("variableDecl", {
   },
 
   generate(g, ast) {
-    g.defVar(ast.var, g.generate(ast.var))
+    g.regVar(ast.var, g.generate(ast.var))
   }
 })
 
@@ -192,7 +202,7 @@ let functionDeclObj = register("functionDecl", {
     if(ast.ret) {
       g.getType(ast.ret, g.generate(ast.ret))
     }
-    g.defFunc(ast.func, g.generate(ast.func))
+    g.regFunc(ast.func, g.generate(ast.func))
 
     g.pushScope(g.generate(ast.func))
     g.generate(ast.block)
@@ -327,23 +337,19 @@ let callArgumentObj = register("callArgument", {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-let parser = new Parser("src.j")
+let source = new Source("src.j")
+let parser = new Parser(source)
+let generator = new Generator(source)
+
 try {
   console.log("PARSING.................")
   let ast = parser.one(objMap["root"])
   console.log(JSON.stringify(ast, null, 2))
 
   console.log("GENERATE................")
-  let gen = new Generator
-  gen.generate(ast)
-  console.log(JSON.stringify(gen, null, 2))
+  generator.generate(ast)
+  console.log(JSON.stringify(generator, null, 2))
 
-  // console.log("COMPILING...............")
-  // let compiled = compile(ast, backend)
-
-  // console.log("EXECUTING...............")
-  // console.log(compiled)
-  // jsVM(compiled)
 } catch(e) {
   console.log(e.toString())
 }

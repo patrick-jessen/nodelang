@@ -1,29 +1,17 @@
-let fs = require("fs")
-
-class ParseError {
-  constructor(parser, pos, message) {
-    this.parser = parser
-    this.position = pos
-    this.message = message
-  }
-
-  toString() {
-    let pos = this.parser.positionInfo(this.position)
-    let fileRef = `${this.parser.file}:${pos.lineNo}:${pos.columnNo+1}`
-    let arrow = " ".repeat(pos.columnNo) + "^"
-
-    return `ERROR: ${this.message}\t./${fileRef}\n` + 
-           `\t${pos.line}\n` + 
-           `\t${arrow}`
-  }
-}
+let ParseError = require("./source").Error
 
 class Parser {
-  constructor(file) {
-    this.file = file
-    this.source = fs.readFileSync(file).toString()
+  constructor(srcObj) {
+    this.srcObj = srcObj
+    this.source = srcObj.join()
+
     this.iter = 0
     this.err = null
+  }
+
+  loadFile(file) {
+    this.srcObj.loadFiles(file)
+    this.source = this.srcObj.join()
   }
 
   done() {
@@ -69,8 +57,8 @@ class Parser {
   error(message, pos) {
     if(pos == null) pos = this.iter
 
-    let e = new ParseError(this, pos, message)
-    if(this.err == null || this.err.position <= e.position) {
+    let e = new ParseError(this.srcObj, pos, message)
+    if(this.err == null || this.err.pos <= e.pos) {
       this.err = e
     }
     return e
@@ -167,8 +155,9 @@ function handleRegExp(p, reg) {
   let m = str.match(reg)
   if(m == null) 
     throw p.error(`expected ${reg}`)
-    
+
   p.iter += m[0].length
+  if(m[1] != null) return m[1]
   return m[0]
 }
 
