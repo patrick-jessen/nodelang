@@ -1,2 +1,5 @@
-var value = "Hello"
-print(value, "world")
+
+func main() -> int {
+    var value = "Hello"
+    print(value, "world")
+}

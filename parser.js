@@ -111,7 +111,10 @@ class Parser {
   opt(...obj) {
     let oldIter = this.iter
     try {
-      return this.one(...obj)
+      let ret = this.one(...obj)
+      if (ret.skip) return null
+      return ret
+
     } catch(e) {
       this.iter = oldIter
       return null
@@ -124,10 +127,14 @@ class Parser {
     for(let i = 0; i < arguments.length; i++) {
       let obj = objs[i]
       try {
+        let ret
         if(obj instanceof Named)
-          return handleNamed(this, obj)
+          ret = JSON.parse(JSON.stringify(handleNamed(this, obj)))
         else
-          return handle(this, obj)
+          ret = JSON.parse(JSON.stringify(handle(this, obj)))
+
+        if (ret.skip) return null
+        return ret
       }
       catch(e) {
         this.iter = oldIter

@@ -8,11 +8,36 @@ class Module {
   }
 }
 
+class FunctionDecl {
+  parse(p) {
+    p.one("func ")
+    this.function = p.one(new Identifier)
+    p.one("(")
+    p.one(")")
+    this.return = p.opt(p => {
+      p.one(" -> ")
+      return p.one(new Identifier)
+    })
+    p.one(/^ {/)
+    p.one(new NewLine)
+    this.block = p.one(new Block)
+    p.one("}")
+  }
+}
+
+class Block {
+  parse(p) {
+    this.block = p.any(new Statement)
+  }
+}
+
 class Statement {
   parse(p) {
+    p.one(/ *|\t*/)
     this.statement = p.one(
       new VariableDecl,
       new FunctionCall,
+      new FunctionDecl,
       new NewLine
     )
   }
@@ -23,7 +48,7 @@ class NewLine {
     this.skip = true
   }
   parse(p) {
-    p.one(new Named("newline", /\r?\n/))
+    p.one(new Named("newline", /^\r?\n/))
   }
 }
 
