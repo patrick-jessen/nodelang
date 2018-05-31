@@ -81,9 +81,11 @@ class Parser {
       let oldIter = this.iter
       try {
         let res = this.one(...obj)
-        if(!res.skip)
+        if(res != null)
           ret.push(res)
       } catch(e) {
+        if(!(e instanceof ParseError)) throw e
+
         this.iter = oldIter
         return ret
       }
@@ -97,9 +99,11 @@ class Parser {
       let oldIter = this.iter
       try {
         let res = this.one(...obj)
-        if(!res.skip)
+        if(res != null)
           ret.push(res)
       } catch(e) {
+        if(!(e instanceof ParseError)) throw e
+
         this.iter = oldIter
         if(ret.length == 0)
           throw e
@@ -111,11 +115,10 @@ class Parser {
   opt(...obj) {
     let oldIter = this.iter
     try {
-      let ret = this.one(...obj)
-      if (ret.skip) return null
-      return ret
-
+      return this.one(...obj)
     } catch(e) {
+      if(!(e instanceof ParseError)) throw e
+
       this.iter = oldIter
       return null
     }
@@ -127,16 +130,14 @@ class Parser {
     for(let i = 0; i < arguments.length; i++) {
       let obj = objs[i]
       try {
-        let ret
         if(obj instanceof Named)
-          ret = JSON.parse(JSON.stringify(handleNamed(this, obj)))
+          return handleNamed(this, obj)
         else
-          ret = JSON.parse(JSON.stringify(handle(this, obj)))
-
-        if (ret.skip) return null
-        return ret
+          return handle(this, obj)
       }
       catch(e) {
+        if(!(e instanceof ParseError)) throw e
+
         this.iter = oldIter
         if(i+1 == arguments.length)
           throw e
@@ -144,7 +145,6 @@ class Parser {
     }
   }
 }
-
 
 function handleString(p, str) {
   let s = p.source.substr(p.iter, str.length)
@@ -180,15 +180,16 @@ function handle(p, obj) {
   else if(obj instanceof RegExp) {
     return handleRegExp(p, obj)
   }
-  else {
-    obj.parse(p)
-    return obj
-  }
+  else 
+    throw `unexpected parse handler type`
 }
+
 function handleNamed(p, obj) {
   try {
     return handle(p, obj.obj)
   } catch(e) {
+    if(!(e instanceof ParseError)) throw e
+
     throw p.error(`expected ${obj.name}`)
   }
 }

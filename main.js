@@ -1,115 +1,133 @@
 let Parser = require("./parser").Parser
 let Named = require("./parser").Named
 
-class Module {
-  parse(p) {
-    this.module = p.any(new Named("statement", new Statement))
-    p.done()
+function parseModule(p) {
+  let module = p.any(new Named("statement", parseStatement))
+  p.done()
+
+  return {
+    $type: "Module",
+    $value: module,
   }
 }
 
-class FunctionDecl {
-  parse(p) {
-    p.one("func ")
-    this.function = p.one(new Identifier)
-    p.one("(")
-    p.one(")")
-    this.return = p.opt(p => {
-      p.one(" -> ")
-      return p.one(new Identifier)
-    })
-    p.one(/^ {/)
-    p.one(new NewLine)
-    this.block = p.one(new Block)
-    p.one("}")
+function parseStatement(p) {
+  p.one(/ *|\t*/)
+  let statement = p.one(
+    parseVariableDecl,
+    parseFunctionCall,
+    parseFunctionDecl,
+    parseNewLine,
+  )
+
+  if(statement == null) return
+  return {
+    $type: "Statement",
+    $value: statement,
   }
 }
 
-class Block {
-  parse(p) {
-    this.block = p.any(new Statement)
+
+function parseVariableDecl(p) {
+  p.one(`var `)
+  let ident = p.one(parseIdentifier)
+  let val = p.opt(p => {
+    p.one(` = `)
+    return p.one(parseStringLiteral)
+  })
+
+  return {
+    $type: "VariableDecl",
+    $value: {
+      var: ident,
+      val: val,
+    }
   }
 }
 
-class Statement {
-  parse(p) {
-    p.one(/ *|\t*/)
-    this.statement = p.one(
-      new VariableDecl,
-      new FunctionCall,
-      new FunctionDecl,
-      new NewLine
-    )
+function parseFunctionCall(p) {
+  let func = p.one(parseIdentifier)
+  p.one(`(`)
+  let args = p.opt(parseCallArgumentList)
+  p.one(`)`)
+
+  return {
+    $type: "FunctionCall",
+    $value: {
+      func: func,
+      args: args,
+    }
   }
 }
 
-class NewLine {
-  constructor() {
-    this.skip = true
-  }
-  parse(p) {
-    p.one(new Named("newline", /^\r?\n/))
-  }
-}
+function parseFunctionDecl(p) {
+  p.one("func ")
+  let func = p.one(parseIdentifier)
+  p.one("(")
+  p.one(")")
+  let ret = p.opt(p => {
+    p.one(" -> ")
+    return p.one(parseIdentifier)
+  })
+  p.one(/^ {/)
+  p.one(parseNewLine)
+  let block = p.one(parseBlock)
+  p.one("}")
 
-class VariableDecl {
-  parse(p) {
-    p.one(`var `)
-    this.var = p.one(new Identifier)
-    this.val = p.opt(p => {
-      p.one(` = `)
-      return p.one(new StringLiteral)
-    })
-  }
-}
-
-class Identifier {
-  parse(p) {
-    this.name = p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]+/))
+  return {
+    $type: "FunctionDecl",
+    $value: {
+      func: func,
+      ret: ret,
+      block: block,
+    }
   }
 }
 
-class FunctionCall {
-  parse(p) {
-    this.function = p.one(new Identifier)
-    p.one(`(`)
-    this.arguments = p.opt(new CallArgumentList)
-    p.one(`)`)
-  }
+function parseNewLine(p) {
+  p.one(new Named("newline", /^\r?\n/))
 }
 
-class CallArgumentList {
-  parse(p) {
-    let first = p.one(new CallArgument)
-    let rest = p.any(p => {
-      p.one(/, ?/)
-      return p.one(new Named("argument", new CallArgument))
-    })
-
-    this.list = [first, ...rest]
-  }
+function parseIdentifier(p) {
+  return p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]+/))
 }
 
-class CallArgument {
-  parse(p) {
-    this.arg = p.one(new StringLiteral, new Identifier)
-  }
-}
-
-class StringLiteral {
-  parse(p) {
+function parseStringLiteral(p) {
     p.one(new Named("string", `"`))
-  this.value = p.one(/^[^(")]*/)
+    let value = p.one(/^[^(")]*/)
     p.one(`"`)
-  }
+
+    return {
+      $type: "StringLiteral",
+      $value: value,
+    }
+}
+
+function parseCallArgumentList(p) {
+  let first = p.one(parseCallArgument)
+  let rest = p.any(p => {
+    p.one(/, ?/)
+    return p.one(new Named("argument", parseCallArgument))
+  })
+
+  return [first, ...rest]
+}
+
+
+function parseBlock(p) {
+  return p.any(parseStatement)
+}
+
+function parseCallArgument(p) {
+  return p.one(parseStringLiteral, parseIdentifier)
 }
 
 let parser = new Parser("src.j")
 try {
-  let ast = parser.one(new Module)
+  let ast = parser.one(parseModule)
   console.log(JSON.stringify(ast, null, 2))
 } catch(e) {
-  console.log(e.toString())
+  console.log(e)
 }
 
 
