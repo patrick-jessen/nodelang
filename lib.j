@@ -1,3 +1,3 @@
-func print() {
+func print2() {
     
 }

@@ -1,9 +1,16 @@
+// @ts-check
+
 let Parser = require("./parser").Parser
 let Named = require("./parser").Named
 let Source = require("./source").Source
 let Error = require("./source").Error
 
 let objMap = {}
+
+/**
+ * @param {String} name 
+ * @param {{parse:((p:Parser) => *), generate?:*, $type?:String}} obj 
+ */
 function register(name, obj) {
   obj.$type = name
   objMap[name] = obj
@@ -96,6 +103,7 @@ class Generator {
     for(let i = this.scopes.length - 1; i >= 0; i--) {
       try {
         fn(this.scopes[i])
+        return
       } catch(e) {
         if(i == 0) throw e
       }
@@ -155,7 +163,7 @@ let blockCommentObj = register("blockComment", {
 
     while(level > 0) {
       m = p.one(new Named("*/", /\/\*|\*\//))
-      if(m == "/*") level++
+      if(m.$value == "/*") level++
       else level--
     }
   }
@@ -170,7 +178,7 @@ let importObj = register("import", {
     p.one(`"`)
     let src = p.one(/^[^\r\n"]*/)
     p.one(`"`)
-    p.loadFile(src + ".j")
+    p.loadFile(src.$value + ".j")
   },
 })
 ////////////////////////////////////////////////////////////////////////////////
@@ -191,7 +199,10 @@ let variableDeclObj = register("variableDecl", {
   },
 
   generate(g, ast) {
-    g.regVar(ast.var, g.generate(ast.var))
+    if(ast.var.$value.module != null)
+      throw parser.error("cannot declare variable on another module", ast.var.$value.symbol.$pos)
+
+    g.regVar(ast.var.$value.symbol, g.generate(ast.var))
   }
 })
 
@@ -222,9 +233,9 @@ let functionDeclObj = register("functionDecl", {
   },
 
   generate(g, ast) {
-    if(ast.ret) {
-      g.getType(ast.ret, g.generate(ast.ret))
-    }
+    // if(ast.ret) {
+    //   g.getType(ast.ret, g.generate(ast.ret))
+    // }
     g.regFunc(ast.func, g.generate(ast.func))
 
     g.pushScope(g.generate(ast.func))
@@ -249,7 +260,7 @@ let functionCallObj = register("functionCall", {
   },
 
   generate(g, ast) {
-    g.getFunc(ast.func, g.generate(ast.func))
+    g.getFunc(ast.func.$value.symbol, g.generate(ast.func))
     g.generate(ast.args)
   }
 })
@@ -286,11 +297,16 @@ let newLineObj = register("newLine", {
 
 let identifierObj = register("identifier", {
   parse(p) {
-    return p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
+    let module = p.opt(/^[a-z]+\./)
+    let symbol = p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
+    return {
+      module: module,
+      symbol: symbol,
+    }
   },
 
   generate(prog, ast) {
-    return ast
+    return ast.symbol.$value
   }
 })
 
@@ -364,16 +380,11 @@ let source = new Source("src.j")
 let parser = new Parser(source)
 let generator = new Generator(source)
 
-try {
-  console.log("PARSING.................")
-  let ast = parser.one(objMap["root"])
-  // console.log(JSON.stringify(ast, null, 2))
+console.log("PARSING.................")
+let ast = parser.one(objMap["root"])
+// console.log(JSON.stringify(ast, null, 2))
 
-  console.log("GENERATE................")
-  generator.generate(ast)
-  // console.log(JSON.stringify(generator, null, 2))
-
-} catch(e) {
-  console.log(e.toString())
-}
+console.log("GENERATE................")
+generator.generate(ast)
+// console.log(JSON.stringify(generator, null, 2))
 

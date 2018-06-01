@@ -1,6 +1,25 @@
+// @ts-check
+
+class Named {
+  constructor(name, obj) {
+    this.name = name
+    this.obj = obj
+  }
+}
+
+/**
+ * @typedef {{parse:((p:Parser) => *), generate?:*, $type?:String}} ParserObj
+ * @typedef {String|RegExp|Named|((p:Parser) => *)|ParserObj} Obj
+ * @typedef {{$pos:Number, $type:String, $value:*}} AstNode
+ */
+
+let Source = require("./source").Source
 let ParseError = require("./source").Error
 
 class Parser {
+  /**
+   * @param {Source} srcObj 
+   */
   constructor(srcObj) {
     this.srcObj = srcObj
     this.source = srcObj.join()
@@ -9,6 +28,9 @@ class Parser {
     this.err = null
   }
 
+  /**
+   * @param {String} file 
+   */
   loadFile(file) {
     this.srcObj.loadFiles(file)
     this.source = this.srcObj.join()
@@ -20,40 +42,18 @@ class Parser {
     }
   }
 
-  positionInfo(pos) {
-    let lines = this.source.split("\n")
-    let lineIter = 0
-    let posIter = 0
-    let symbolIdx = 0
-    let targetPos = pos
-    if(targetPos == null)
-      targetPos = this.iter
-
-    while(posIter <= targetPos) {
-      let line = lines[lineIter]
-
-      if(posIter + line.length >= targetPos) {
-        symbolIdx = targetPos - posIter
-        break
-      }
-      posIter += line.length + 1
-      lineIter++
-    }
-
-    return {
-      lineNo: lineIter+1,
-      columnNo: symbolIdx,
-      line: lines[lineIter],
-    }
-  }
-
   print() {
-    let pos = this.positionInfo()
+    let pos = this.srcObj.positionInfo(this.iter)
     let pre = `${pos.lineNo} |  `
     let arrow = " ".repeat(pre.length + pos.columnNo) + "^"
     console.log(`${pre}${pos.line}\n${arrow}`)
   }
 
+  /**
+   * @param {String} message 
+   * @param {Number} [pos]
+   * @return {ParseError}
+   */
   error(message, pos) {
     if(pos == null) pos = this.iter
 
@@ -64,13 +64,17 @@ class Parser {
     return e
   }
 
-  any(...obj) {
+  /**
+   * @param {Obj[]} objs
+   * @return {AstNode[]}
+   */
+  any(...objs) {
     let ret = []
 
     while(true) {
       let oldIter = this.iter
       try {
-        let res = this.one(...obj)
+        let res = this.one(...objs)
         if(res != null)
           ret.push(res)
       } catch(e) {
@@ -82,13 +86,17 @@ class Parser {
     }
   }
 
-  many(...obj) {
+  /**
+   * @param {Obj[]} objs
+   * @return {AstNode[]}
+   */
+  many(...objs) {
     let ret = []
 
     while(true) {
       let oldIter = this.iter
       try {
-        let res = this.one(...obj)
+        let res = this.one(...objs)
         if(res != null)
           ret.push(res)
       } catch(e) {
@@ -102,10 +110,14 @@ class Parser {
     }
   }
 
-  opt(...obj) {
+  /**
+   * @param {Obj[]} objs
+   * @return {AstNode}
+   */
+  opt(...objs) {
     let oldIter = this.iter
     try {
-      return this.one(...obj)
+      return this.one(...objs)
     } catch(e) {
       if(!(e instanceof ParseError)) throw e
 
@@ -114,6 +126,10 @@ class Parser {
     }
   }
 
+  /**
+   * @param {Obj[]} objs
+   * @return {AstNode}
+   */
   one(...objs) {
     let oldIter = this.iter
 
@@ -136,6 +152,11 @@ class Parser {
   }
 }
 
+/**
+ * @param {Parser} p
+ * @param {String} str
+ * @return {String}
+ */
 function handleString(p, str) {
   let s = p.source.substr(p.iter, str.length)
   if(s != str) {
@@ -150,6 +171,11 @@ function handleString(p, str) {
   return str
 }
 
+/**
+ * @param {Parser} p
+ * @param {RegExp} reg
+ * @return {String}
+ */
 function handleRegExp(p, reg) {
   let str = p.source.substr(p.iter)
   let m = str.match(reg)
@@ -161,33 +187,48 @@ function handleRegExp(p, reg) {
   return m[0]
 }
 
+/**
+ * @param {Parser} p
+ * @param {Obj} obj
+ * @return {AstNode}
+ */
 function handle(p, obj) {
   let pos = p.iter
+  let type
   let res
 
   if(typeof obj == "string") {
     res = handleString(p, obj)
+    type = "string"
   }
   else if(obj instanceof RegExp) {
     res = handleRegExp(p, obj)
+    type = "string"
   }
   else if(typeof obj == "function") {
     res = obj(p)
     if(res == null) return
+    if(res.$type != null) return res
+    type = "???"
   }
-  else {
-    let r = obj.parse(p)
-    if(r == null) return
-    res = {
-      $type: obj.$type,
-      $value: r
-    }
+  else if(!(obj instanceof Named)) {
+    res = obj.parse(p)
+    if(res == null) return
+    type = obj.$type
   }
 
-  res.$pos = pos
-  return res
+  return {
+    $pos: pos,
+    $type: type,
+    $value: res
+  }
 }
 
+/**
+ * @param {Parser} p
+ * @param {Named} obj
+ * @return {AstNode}
+ */
 function handleNamed(p, obj) {
   try {
     return handle(p, obj.obj)
@@ -195,13 +236,6 @@ function handleNamed(p, obj) {
     if(!(e instanceof ParseError)) throw e
 
     throw p.error(`expected ${obj.name}`)
-  }
-}
-
-class Named {
-  constructor(name, obj) {
-    this.name = name
-    this.obj = obj
   }
 }
 

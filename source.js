@@ -1,12 +1,21 @@
+// @ts-check
 let fs = require("fs")
 
 class Error {
+  /**
+   * @param {Source} src 
+   * @param {Number} pos 
+   * @param {String} msg 
+   */
   constructor(src, pos, msg) {
     this.src = src
     this.pos = pos
     this.msg = msg
   }
 
+  /**
+   * @returns {String}
+   */
   toString() {
     let posInfo = this.src.positionInfo(this.pos)
     let fileRef = `${posInfo.file}:${posInfo.lineNo}:${posInfo.columnNo+1}`
@@ -19,6 +28,9 @@ class Error {
 }
 
 class File {
+  /**
+   * @param {String} name 
+   */
   constructor(name) {
     this.name = name
     this.src = fs.readFileSync(name).toString()
@@ -26,12 +38,19 @@ class File {
 }
 
 class Source {
+
+  /**
+   * @param {String[]} files 
+   */
   constructor(...files) {
     this.files = []
     this.totalLen = 0
     this.loadFiles(...files)
   }
 
+  /**
+   * @param {String[]} names 
+   */
   loadFiles(...names) {
     for(let i = 0; i < arguments.length; i++) {
       let f = new File(names[i])
@@ -40,10 +59,17 @@ class Source {
     }
   }
 
+  /**
+   * @return {String}
+   */
   join() {
     return this.files.map(f => f.src).join("\n")
   }
 
+  /**
+   * @param {Number} pos 
+   * @return {{file:String, line:String, lineNo:Number, columnNo:Number}}
+   */
   positionInfo(pos) {
     let iter = 0
 
