@@ -66,7 +66,7 @@ let importObj = lib.registerRule("import", {
   parse(p) {
     p.one("import ")
     p.one(`"`)
-    let src = p.one(/^[^\r\n"]*/)
+    let src = p.one(/^[a-z\/]*/)
     p.one(`"`)
     p.one(newLineObj)
     lib.loadModule(p, src.$value)
