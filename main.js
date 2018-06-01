@@ -1,9 +1,7 @@
 // @ts-check
 
-let Parser = require("./parser").Parser
-let Named = require("./parser").Named
-let Source = require("./source").Source
-let Error = require("./source").Error
+let {Parser, Named} = require("./lib/parser")
+let {Source, Error} = require("./lib/source")
 
 let objMap = {}
 
