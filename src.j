@@ -1,8 +1,5 @@
 import "lib"
 
-func print() {
-    
-}
 
 func main() -> int {
     var value = "Hello"
