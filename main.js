@@ -1,23 +1,9 @@
 // @ts-check
 
-let {Parser, Named} = require("./lib/parser")
-let {Source, Error} = require("./lib/source")
-
-let objMap = {}
-
-/**
- * @param {String} name 
- * @param {{parse:((p:Parser) => *), generate?:*, $type?:String}} obj 
- */
-function register(name, obj) {
-  obj.$type = name
-  objMap[name] = obj
-  return obj
-}
-
-function g(name) {
-  return objMap[name]
-}
+// @ts-ignore
+let {Named} = require("./lib/parser")
+// @ts-ignore
+let lib = require("./lib/lib")
 
 
 class Scope {
@@ -111,23 +97,23 @@ class Generator {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-register("root", {
+lib.registerRule("root", {
   parse(p) {
     let stmts = p.any(statementObj)
     p.done()
     return stmts
   },
 
-  generate(g, ast) {
-    g.pushScope("global")
-    ast.map(a => g.generate(a))
-    g.popScope()
+  analyze(a, ast) {
+    a.pushScope("global")
+    ast.$value.map(stmt => a.analyze(stmt))
+    a.popScope()
   }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let statementObj = register("statement", {
+let statementObj = lib.registerRule("statement", {
   parse(p) {
     p.one(/ *|\t*/)
     let statement = p.one(
@@ -142,19 +128,19 @@ let statementObj = register("statement", {
     return statement
   },
 
-  generate(g, ast) {
-    g.generate(ast)
+  analyze(g, ast) {
+    g.analyze(ast.$value)
   }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
-let commentObj = register("comment", {
+let commentObj = lib.registerRule("comment", {
   parse(p) {
     p.one("//")
     p.one(/^.*/)
   }
 })
-let blockCommentObj = register("blockComment", {
+let blockCommentObj = lib.registerRule("blockComment", {
   parse(p) {
     let m = p.one("/*")
     let level = 1
@@ -170,7 +156,7 @@ let blockCommentObj = register("blockComment", {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let importObj = register("import", {
+let importObj = lib.registerRule("import", {
   parse(p) {
     p.one("import ")
     p.one(`"`)
@@ -181,7 +167,7 @@ let importObj = register("import", {
 })
 ////////////////////////////////////////////////////////////////////////////////
 
-let variableDeclObj = register("variableDecl", {
+let variableDeclObj = lib.registerRule("variableDecl", {
   parse(p) {
     p.one(`var `)
     let ident = p.one(identifierObj)
@@ -196,20 +182,17 @@ let variableDeclObj = register("variableDecl", {
     }
   },
 
-  generate(g, ast) {
-    if(ast.var.$value.module != null)
-      throw parser.error("cannot declare variable on another module", ast.var.$value.symbol.$pos)
-
-    g.regVar(ast.var.$value.symbol, g.generate(ast.var))
+  analyze(a, ast) {
+    a.registerVariable(ast.$value.var, ast.$value.val)
   }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let functionDeclObj = register("functionDecl", {
+let functionDeclObj = lib.registerRule("functionDecl", {
   parse(p) {
     p.one("func ")
-    let func = p.one(identifierObj)
+    let name = p.one(identifierObj)
     p.one("(")
     let args = p.opt(argumentListObj)
     p.one(")")
@@ -223,28 +206,28 @@ let functionDeclObj = register("functionDecl", {
     p.one("}")
 
     return {
-      func: func,
+      name: name,
       args: args,
       ret: ret,
       block: block,
     }
   },
 
-  generate(g, ast) {
-    // if(ast.ret) {
-    //   g.getType(ast.ret, g.generate(ast.ret))
-    // }
-    g.regFunc(ast.func, g.generate(ast.func))
+  analyze(a, ast) {
+    a.registerFunction(
+      ast.$value.name,
+      ast.$value.ret,
+    )
 
-    g.pushScope(g.generate(ast.func))
-    g.generate(ast.block)
-    g.popScope()
+    a.pushScope(ast.$value.name.$value.$value)
+    a.analyze(ast.$value.block)
+    a.popScope()
   }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let functionCallObj = register("functionCall", {
+let functionCallObj = lib.registerRule("functionCall", {
   parse(p) {
     let func = p.one(identifierObj)
     p.one(`(`)
@@ -257,15 +240,16 @@ let functionCallObj = register("functionCall", {
     }
   },
 
-  generate(g, ast) {
-    g.getFunc(ast.func.$value.symbol, g.generate(ast.func))
-    g.generate(ast.args)
+  analyze(a, ast) {
+    a.expectFunction(ast.$value.func)
+    // g.getFunc(ast.func.$value.symbol, g.generate(ast.func))
+    // g.generate(ast.args)
   }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let argumentListObj = register("argumentList", {
+let argumentListObj = lib.registerRule("argumentList", {
   parse(p) {
     let first = p.one(identifierObj)
     let rest = p.any(p => {
@@ -281,36 +265,24 @@ let argumentListObj = register("argumentList", {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let newLineObj = register("newLine", {
+let newLineObj = lib.registerRule("newLine", {
   parse(p) {
     p.one(new Named("newline", /^\r?\n/))
-  },
-
-  generate() {
-    
   }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let identifierObj = register("identifier", {
+let identifierObj = lib.registerRule("identifier", {
   parse(p) {
-    let module = p.opt(/^[a-z]+\./)
-    let symbol = p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
-    return {
-      module: module,
-      symbol: symbol,
-    }
+    return p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
   },
 
-  generate(prog, ast) {
-    return ast.symbol.$value
-  }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let stringLiteralObj = register("stringLiteral", {
+let stringLiteralObj = lib.registerRule("stringLiteral", {
   parse(p) {
     p.one(new Named("string", `"`))
     let value = p.one(/^[^(")]*/)
@@ -326,7 +298,7 @@ let stringLiteralObj = register("stringLiteral", {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let callArgumentListObj = register("callArgumentList", {
+let callArgumentListObj = lib.registerRule("callArgumentList", {
   parse(p) {
     let first = p.one(callArgumentObj)
     let rest = p.any(p => {
@@ -344,19 +316,19 @@ let callArgumentListObj = register("callArgumentList", {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let blockObj = register("block", {
+let blockObj = lib.registerRule("block", {
   parse(p) {
     return p.any(statementObj)
   },
 
-  generate(g, ast) {
-    ast.map(s => g.generate(s))
+  analyze(a, ast) {
+    ast.$value.map(stmt => a.analyze(stmt))
   }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-let callArgumentObj = register("callArgument", {
+let callArgumentObj = lib.registerRule("callArgument", {
   parse(p) {
     return p.one(stringLiteralObj, identifierObj)
   },
@@ -373,16 +345,4 @@ let callArgumentObj = register("callArgument", {
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-
-let source = new Source("src.j")
-let parser = new Parser(source)
-let generator = new Generator(source)
-
-console.log("PARSING.................")
-let ast = parser.one(objMap["root"])
-// console.log(JSON.stringify(ast, null, 2))
-
-console.log("GENERATE................")
-generator.generate(ast)
-// console.log(JSON.stringify(generator, null, 2))
-
+lib.run("src.j")

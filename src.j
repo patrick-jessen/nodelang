@@ -1,6 +1,10 @@
 import "lib"
 
-func main() {
+func print() {
+    
+}
+
+func main() -> int {
     var value = "Hello"
-    lib.print(value, "world")
+    print(value, "world")
 }
