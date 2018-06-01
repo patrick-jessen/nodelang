@@ -156,7 +156,7 @@ function handleRegExp(p, reg) {
   if(m == null) 
     throw p.error(`expected ${reg}`)
 
-  p.iter += m[0].length
+  p.iter += m.index + m[0].length
   if(m[1] != null) return m[1]
   return m[0]
 }

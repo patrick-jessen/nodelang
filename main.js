@@ -125,6 +125,8 @@ let statementObj = register("statement", {
   parse(p) {
     p.one(/ *|\t*/)
     let statement = p.one(
+      commentObj,
+      blockCommentObj,
       importObj,
       variableDeclObj,
       functionCallObj,
@@ -138,6 +140,27 @@ let statementObj = register("statement", {
     g.generate(ast)
   }
 })
+
+////////////////////////////////////////////////////////////////////////////////
+let commentObj = register("comment", {
+  parse(p) {
+    p.one("//")
+    p.one(/^.*/)
+  }
+})
+let blockCommentObj = register("blockComment", {
+  parse(p) {
+    let m = p.one("/*")
+    let level = 1
+
+    while(level > 0) {
+      m = p.one(new Named("*/", /\/\*|\*\//))
+      if(m == "/*") level++
+      else level--
+    }
+  }
+})
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -344,11 +367,11 @@ let generator = new Generator(source)
 try {
   console.log("PARSING.................")
   let ast = parser.one(objMap["root"])
-  console.log(JSON.stringify(ast, null, 2))
+  // console.log(JSON.stringify(ast, null, 2))
 
   console.log("GENERATE................")
   generator.generate(ast)
-  console.log(JSON.stringify(generator, null, 2))
+  // console.log(JSON.stringify(generator, null, 2))
 
 } catch(e) {
   console.log(e.toString())
