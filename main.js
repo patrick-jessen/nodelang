@@ -9,16 +9,11 @@ let lib = require("./lib/lib")
 
 lib.registerRule("root", {
   parse(p) {
-    let stmts = p.any(statementObj)
-    p.done()
-    return {
-      module: p.fileName,
-      statements: stmts,
-    }
+    return p.any(statementObj)
   },
 
   analyze(a, ast) {
-    ast.$value.statements.map(stmt => a.analyze(stmt))
+    ast.$value.map(stmt => a.analyze(stmt))
   }
 })
 
