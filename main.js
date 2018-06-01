@@ -32,8 +32,8 @@ let statementObj = lib.registerRule("statement", {
       blockCommentObj,
       importObj,
       variableDeclObj,
-      functionCallObj,
       functionDeclObj,
+      functionCallObj,
       newLineObj,
     )
     return statement
@@ -141,6 +141,15 @@ let functionDeclObj = lib.registerRule("functionDecl", {
 
 let functionCallObj = lib.registerRule("functionCall", {
   parse(p) {
+    return p.one(localFunctionCallObj, remoteFunctionCallObj)
+  },
+  analyze(a, ast) {
+    a.analyze(ast.$value)
+  }
+})
+
+let localFunctionCallObj = lib.registerRule("localFunctionCall", {
+  parse(p) {
     let func = p.one(identifierObj)
     p.one(`(`)
     let args = p.opt(callArgumentListObj)
@@ -154,8 +163,26 @@ let functionCallObj = lib.registerRule("functionCall", {
 
   analyze(a, ast) {
     a.expectFunction(ast.$value.func)
-    // g.getFunc(ast.func.$value.symbol, g.generate(ast.func))
-    // g.generate(ast.args)
+  }
+})
+
+let remoteFunctionCallObj = lib.registerRule("remoteFunctionCall", {
+  parse(p) {
+    let module = p.one(/^([a-z]+)\./)
+    let func = p.one(identifierObj)
+    p.one(`(`)
+    let args = p.opt(callArgumentListObj)
+    p.one(`)`)
+
+    return {
+      module: module,
+      func: func,
+      args: args,
+    }
+  },
+
+  analyze(a, ast) {
+    a.expectRemoteFunction(ast.$value.module, ast.$value.func)
   }
 })
 
