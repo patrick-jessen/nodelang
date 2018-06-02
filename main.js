@@ -25,7 +25,7 @@ lib.registerRule("root", {
 
 let statementObj = lib.registerRule("statement", {
   parse(p) {
-    p.one(/ *|\t*/)
+    p.one(/[ \t]*/)
     let statement = p.one(
       commentObj,
       blockCommentObj,
@@ -88,7 +88,7 @@ let variableDeclObj = lib.registerRule("variableDecl", {
     let ident = p.one(identifierObj)
     let val = p.opt(p => {
       p.one(` = `)
-      return p.one(stringLiteralObj)
+      return p.one(rhsObj)
     })
 
     return {
@@ -103,7 +103,20 @@ let variableDeclObj = lib.registerRule("variableDecl", {
 
   analyze2(a, ast) {
     let ident = ast.$value.var.$value
-    a.registerVariable(ident.$pos, ident.$value)
+    let value = ast.$value.val.$value
+
+    let inferredType = ""
+
+    switch(value.$type) {
+      case "stringLiteral":
+        inferredType = "string"
+      break;
+      case "identifier":
+        
+      break;
+    }
+
+    a.registerVariable(ident.$pos, ident.$value, inferredType)
   }
 })
 
@@ -118,7 +131,7 @@ let functionDeclObj = lib.registerRule("functionDecl", {
     p.one(")")
     let ret = p.opt(p => {
       p.one(" -> ")
-      return p.one(identifierObj)
+      return p.one(typeObj)
     })
     p.one(/^ {/)
     p.one(newLineObj)
@@ -146,9 +159,30 @@ let functionDeclObj = lib.registerRule("functionDecl", {
 
   analyze2(a, ast) {
     let ident = ast.$value.name.$value
-    a.pushFunction(ident.$pos, ident.$value)
+    let ret = ast.$value.ret.$value
+    let args = ast.$value.args.$value
+
+    let argsObjs = args.map(a => {
+      return {
+        name: a.name.$value.$value,
+        type: a.type.$value
+      }
+    })
+
+    a.pushFunction(ident.$pos, ident.$value, argsObjs, ret.$value)
     a.analyze(ast.$value.block)
     a.pop()
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let rhsObj = lib.registerRule("rhs", {
+  parse(p) {
+    return p.one(
+      stringLiteralObj,
+      identifierObj
+    )
   }
 })
 
@@ -208,12 +242,27 @@ let remoteFunctionCallObj = lib.registerRule("remoteFunctionCall", {
 let argumentListObj = lib.registerRule("argumentList", {
   parse(p) {
     let first = p.one(identifierObj)
+    p.one(" ")
+    let firstType = p.one(typeObj)
+
     let rest = p.any(p => {
-      p.one(/, ?/)
-      return p.one(new Named("argument", identifierObj))
+      p.one(/^, ?/)
+      let arg = p.one(new Named("argument", identifierObj))
+      p.one(" ")
+      let argType = p.one(typeObj)
+
+      return {
+        name: arg,
+        type: argType
+      }
     })
 
-    return [first, ...rest]
+    let firstObj = {
+      name: first,
+      type: firstType
+    }
+
+    return [firstObj, ...rest]
   },
 
 })
@@ -245,6 +294,14 @@ let stringLiteralObj = lib.registerRule("stringLiteral", {
 
     return value
   },
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let typeObj = lib.registerRule("type", {
+  parse(p) {
+    return p.one(new Named("type", /^[a-zA-Z]+/))
+  }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
