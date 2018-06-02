@@ -9,11 +9,26 @@ let lib = require("./lib/lib")
 
 lib.registerRule("root", {
   parse(p) {
-    return p.any(statementObj)
+    let imports = p.any(importObj)
+    imports.forEach(i => lib.loadModule(p, i.$value.$value))
+
+    return p.any(new Named("declaration statement", declStatmentObj))
   },
 
   analyze(a, ast) {
     ast.$value.map(stmt => a.analyze(stmt))
+  }
+})
+
+////////////////////////////////////////////////////////////////////////////////
+
+let declStatmentObj = lib.registerRule("declStatement", {
+  parse(p) {
+    let decl = p.one(newLineObj, variableDeclObj, functionDeclObj)
+    return decl    
+  },
+  analyze(a, ast) {
+    return a.analyze(ast.$value)
   }
 })
 
@@ -67,8 +82,7 @@ let importObj = lib.registerRule("import", {
     p.one(`"`)
     let src = p.one(/^[a-z\/]*/)
     p.one(`"`)
-    p.one(newLineObj)
-    lib.loadModule(p, src.$value)
+    return src
   },
 })
 
