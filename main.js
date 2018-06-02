@@ -26,6 +26,7 @@ let statementObj = lib.registerRule("statement", {
       commentObj,
       blockCommentObj,
       importObj,
+      variableAssign,
       variableDeclObj,
       functionDeclObj,
       functionCallObj,
@@ -110,7 +111,23 @@ let variableDeclObj = lib.registerRule("variableDecl", {
     }
     
     a.declareVariable(name, type)
-    a.assignVariable(name, value)
+    if(value != null)
+      a.assignVariable(name, value)
+  }
+})
+
+let variableAssign = lib.registerRule("variableAssign", {
+  parse(p) {
+    let lhs = p.one(identifierObj)
+    p.one(" = ")
+    let rhs = p.one(rhsObj)
+
+    return {
+      lhs, rhs
+    }
+  },
+  analyze(a, ast) {
+    a.assignVariable(ast.$value.lhs.$value, ast.$value.rhs.$value)
   }
 })
 
