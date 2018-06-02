@@ -1,8 +1,12 @@
 import "lib"
 
-var value = "Hello"
+var varWithType string
 
-func main(test int) -> int {
+var value = "Hello"
+var value2 = value
+
+
+/*func main(test int) -> int {
    var val2 = value
    // lib.print(value, "world")
-}
+}*/

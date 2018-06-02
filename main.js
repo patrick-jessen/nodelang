@@ -86,14 +86,27 @@ let variableDeclObj = lib.registerRule("variableDecl", {
   parse(p) {
     p.one(`var `)
     let ident = p.one(identifierObj)
-    let val = p.opt(p => {
-      p.one(` = `)
-      return p.one(rhsObj)
-    })
+    p.one(" ")
+    let then = p.one(
+      p => {
+        p.one(`= `)
+        return p.one(rhsObj)
+      },
+      typeObj
+    )
+    
+    let value
+    let type
+
+    if(then.$type == "type")
+      type = then.$value
+    else
+      value = then
 
     return {
-      var: ident,
-      val: val,
+      name: ident,
+      value: value,
+      type: type
     }
   },
 
@@ -102,21 +115,14 @@ let variableDeclObj = lib.registerRule("variableDecl", {
   },
 
   analyze2(a, ast) {
-    let ident = ast.$value.var.$value
-    let value = ast.$value.val.$value
+    let name = ast.$value.name.$value
+    let type = ast.$value.type
 
-    let inferredType = ""
+    if(type == null) {
 
-    switch(value.$type) {
-      case "stringLiteral":
-        inferredType = "string"
-      break;
-      case "identifier":
-        
-      break;
     }
 
-    a.registerVariable(ident.$pos, ident.$value, inferredType)
+    a.registerVariable(name, type)
   }
 })
 
