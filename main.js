@@ -14,10 +14,6 @@ lib.registerRule("root", {
 
   analyze(a, ast) {
     ast.$value.map(stmt => a.analyze(stmt))
-  },
-
-  analyze2(a, ast) {
-    ast.$value.map(stmt => a.analyze(stmt))
   }
 })
 
@@ -40,10 +36,6 @@ let statementObj = lib.registerRule("statement", {
 
   analyze(g, ast) {
     g.analyze(ast.$value)
-  },
-
-  analyze2(a, ast) {
-    a.analyze(ast.$value)
   }
 })
 
@@ -66,8 +58,6 @@ let blockCommentObj = lib.registerRule("blockComment", {
     }
   }
 })
-
-
 ////////////////////////////////////////////////////////////////////////////////
 
 let importObj = lib.registerRule("import", {
@@ -80,28 +70,24 @@ let importObj = lib.registerRule("import", {
     lib.loadModule(p, src.$value)
   },
 })
+
 ////////////////////////////////////////////////////////////////////////////////
 
 let variableDeclObj = lib.registerRule("variableDecl", {
   parse(p) {
     p.one(`var `)
     let ident = p.one(identifierObj)
-    p.one(" ")
-    let then = p.one(
-      p => {
-        p.one(`= `)
-        return p.one(rhsObj)
-      },
-      typeObj
-    )
-    
-    let value
-    let type
+    let type = p.opt(p => {
+      p.one(/^[ \t]*/)
+      return p.one(typeObj)
+    })
+    let value = p.opt(p => {
+      p.one(/^[ \t]*=[ \t]*/)
+      return p.one(rhsObj)
+    })
 
-    if(then.$type == "type")
-      type = then.$value
-    else
-      value = then
+    if(type == null && value == null)
+      throw p.error("expected type and/or assignment", p.iter)
 
     return {
       name: ident,
@@ -111,18 +97,16 @@ let variableDeclObj = lib.registerRule("variableDecl", {
   },
 
   analyze(a, ast) {
-    a.registerVariable(ast.$value.var, ast.$value.val)
-  },
-
-  analyze2(a, ast) {
     let name = ast.$value.name.$value
-    let type = ast.$value.type
+    let type
+    let value
 
-    if(type == null) {
-
-    }
-
-    a.registerVariable(name, type)
+    if(ast.$value.type != null)
+      type = ast.$value.type.$value
+    if(ast.$value.value != null)
+      value = ast.$value.value.$value
+    
+    a.registerVariable(name, type, value)
   }
 })
 
@@ -153,17 +137,6 @@ let functionDeclObj = lib.registerRule("functionDecl", {
   },
 
   analyze(a, ast) {
-    a.registerFunction(
-      ast.$value.name,
-      ast.$value.ret,
-    )
-
-    a.pushScope(ast.$value.name.$value.$value)
-    a.analyze(ast.$value.block)
-    a.popScope()
-  },
-
-  analyze2(a, ast) {
     let ident = ast.$value.name.$value
     let ret = ast.$value.ret.$value
     let args = ast.$value.args.$value
@@ -175,7 +148,7 @@ let functionDeclObj = lib.registerRule("functionDecl", {
       }
     })
 
-    a.pushFunction(ident.$pos, ident.$value, argsObjs, ret.$value)
+    a.pushFunction(ident, argsObjs, ret.$value)
     a.analyze(ast.$value.block)
     a.pop()
   }
@@ -185,10 +158,12 @@ let functionDeclObj = lib.registerRule("functionDecl", {
 
 let rhsObj = lib.registerRule("rhs", {
   parse(p) {
-    return p.one(
+    return p.one(new Named("expression", p => p.one(
       stringLiteralObj,
+      floatLiteralObj,
+      integerLiteralObj,
       identifierObj
-    )
+    )))
   }
 })
 
@@ -214,11 +189,6 @@ let localFunctionCallObj = lib.registerRule("localFunctionCall", {
       func: func,
       args: args,
     }
-  },
-
-  analyze(a, ast) {
-    a.expectFunction(ast.$value.func)
-    a.analyze(ast.$value.args)
   }
 })
 
@@ -235,11 +205,6 @@ let remoteFunctionCallObj = lib.registerRule("remoteFunctionCall", {
       func: func,
       args: args,
     }
-  },
-
-  analyze(a, ast) {
-    a.expectRemoteFunction(ast.$value.module, ast.$value.func)
-    a.analyze(ast.$value.args)
   }
 })
 
@@ -286,8 +251,7 @@ let newLineObj = lib.registerRule("newLine", {
 let identifierObj = lib.registerRule("identifier", {
   parse(p) {
     return p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
-  },
-
+  }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -299,7 +263,17 @@ let stringLiteralObj = lib.registerRule("stringLiteral", {
     p.one(`"`)
 
     return value
-  },
+  }
+})
+let integerLiteralObj = lib.registerRule("integerLiteral", {
+  parse(p) {
+    return p.one(/^0|[1-9][0-9]*/)
+  }
+})
+let floatLiteralObj = lib.registerRule("floatLiteral", {
+  parse(p) {
+    return p.one(/^(?:0|[1-9][0-9]+)\.[0-9]+/)
+  }
 })
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -321,10 +295,6 @@ let callArgumentListObj = lib.registerRule("callArgumentList", {
     })
 
     return [first, ...rest]
-  },
-
-  analyze(a, ast) {
-    ast.$value.map(arg => a.analyze(arg))
   }
 })
 
@@ -334,12 +304,7 @@ let blockObj = lib.registerRule("block", {
   parse(p) {
     return p.any(statementObj)
   },
-
   analyze(a, ast) {
-    ast.$value.map(stmt => a.analyze(stmt))
-  },
-
-  analyze2(a, ast) {
     ast.$value.map(stmt => a.analyze(stmt))
   }
 })
@@ -349,14 +314,6 @@ let blockObj = lib.registerRule("block", {
 let callArgumentObj = lib.registerRule("callArgument", {
   parse(p) {
     return p.one(stringLiteralObj, identifierObj)
-  },
-
-  analyze(a, ast) {
-    switch(ast.$value.$type) {
-      case "identifier":
-        a.expectVariable(ast.$value)
-        break
-    }
   }
 })
 

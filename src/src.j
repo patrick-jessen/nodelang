@@ -1,9 +1,11 @@
 import "lib"
 
-var varWithType string
+// var varWithVal = varWithType
+// var varWithType string
+var varWithLit = 100.01
 
-var value = "Hello"
-var value2 = value
+// var value = "Hello"
+// var value2 = value
 
 
 /*func main(test int) -> int {
