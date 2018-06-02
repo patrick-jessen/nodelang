@@ -34,8 +34,8 @@ let statementObj = lib.registerRule("statement", {
     return statement
   },
 
-  analyze(g, ast) {
-    g.analyze(ast.$value)
+  analyze(a, ast) {
+    a.analyze(ast.$value)
   }
 })
 
@@ -142,8 +142,11 @@ let functionDeclObj = lib.registerRule("functionDecl", {
 
   analyze(a, ast) {
     let ident = ast.$value.name.$value
+    let ret
+    if(ast.$value.ret != null)
+      ret = ast.$value.ret.$value
 
-    a.pushFunction(ident, null, null)
+    a.pushFunction(ident, ret)
     a.analyze(ast.$value.block)
     a.pop()
   }
@@ -154,11 +157,44 @@ let functionDeclObj = lib.registerRule("functionDecl", {
 let rhsObj = lib.registerRule("rhs", {
   parse(p) {
     return p.one(new Named("expression", p => p.one(
+      addObj,
       stringLiteralObj,
       floatLiteralObj,
       integerLiteralObj,
       identifierObj
     )))
+  },
+  inferType(a, ast) {
+    return a.inferType(ast.$value)
+  }
+})
+
+let addObj = lib.registerRule("add", {
+  parse(p) {
+    let lhs = p.one(
+      stringLiteralObj,
+      floatLiteralObj,
+      integerLiteralObj,
+      identifierObj
+    )
+    p.one(" + ")
+    let rhs = p.one(rhsObj)
+
+    return { lhs,rhs }
+  },
+  
+  inferType(a, ast) {
+    let lhsType = a.inferType(ast.$value.lhs)
+    let rhsType = a.inferType(ast.$value.rhs)
+
+    if(lhsType != rhsType)
+      throw a.srcObj.error(`type mismatch. Cannot add ${lhsType} and ${rhsType}`, ast.$value.rhs.$pos)
+
+    return lhsType
+  },
+
+  analyze(a, ast) {
+
   }
 })
 
@@ -247,9 +283,14 @@ let identifierObj = lib.registerRule("identifier", {
   parse(p) {
     return p.one(new Named('identifier', /^[a-zA-Z][a-zA-Z0-9]*/))
   },
-  analyze(a, ast) {
-    a.expectVariable(ast.$value)
-  }
+  inferType(a, ast) {
+    let sym = a.getVariable(ast.$value.$value)
+    if(sym == null)
+      throw a.srcObj.error(`undeclared variable '${ast.$value.$value}'`, ast.$value.$pos)
+
+    return sym.type
+  },
+  analyze(a, ast) {}
 })
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -262,18 +303,28 @@ let stringLiteralObj = lib.registerRule("stringLiteral", {
 
     return value
   },
-
+  inferType(a, ast) {
+    return "string"
+  },
+  analyze(a, ast) {}
 })
 let integerLiteralObj = lib.registerRule("integerLiteral", {
   parse(p) {
     return p.one(/^(0|[1-9][0-9]*)/)
   },
-  analyze(a, ast){}
+  inferType(a, ast) {
+    return "int"
+  },
+  analyze(a, ast) {}
 })
 let floatLiteralObj = lib.registerRule("floatLiteral", {
   parse(p) {
     return p.one(/^(?:0|([1-9][0-9]+))\.[0-9]+/)
-  }
+  },
+  inferType(a, ast) {
+    return "float"
+  },
+  analyze(a, ast) {}
 })
 
 ////////////////////////////////////////////////////////////////////////////////
