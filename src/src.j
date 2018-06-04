@@ -1,4 +1,4 @@
 func main() {
   var value = "Hello"
-  print()
+  print(2-3*4+2/1)
 }
