@@ -1,5 +1,4 @@
-var value = "hello"
-
 func main() {
-  var test = value + value
+  var value = "Hello"
+  print()
 }
