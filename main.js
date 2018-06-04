@@ -404,4 +404,10 @@ let callArgumentObj = lib.registerRule("callArgument", {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-lib.run("./src")
+let lexer = require("./lib/lexer/lexer")
+
+let tokens = lexer.run("import  \n\nkek", (msg,pos) => {
+  throw console.log("err", msg, pos)
+})
+console.log(tokens)
+// lib.run("./src")
